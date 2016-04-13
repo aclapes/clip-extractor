@@ -25,7 +25,7 @@ PARAMETERS = dict(
     # face_displacement_threshold=0.75,
     #video_score_threshold=0.33,  # 0-1 range
     segment_score_threshold=0.5,  # 0-1 range
-    cuts_per_video=6,
+    cuts_per_video=1000,
     time_gran_secs=1,
 )
 
@@ -38,13 +38,13 @@ def process(external_parameters, nt=1):
     dirlist = listdir(external_parameters['videos_dir_path'])
 
     # process all the files!!
-    Parallel(n_jobs=nt, backend='multiprocessing')(delayed(process_file)(file, external_parameters)
+    Parallel(n_jobs=nt, backend='threading')(delayed(process_file)(file, external_parameters)
                                                    for file in dirlist)
 
 
 def process_file(file, external_parameters):
     videos_path = external_parameters['videos_dir_path']
-    discarded_path = external_parameters['discarded_dir_path']
+    # discarded_path = external_parameters['discarded_dir_path']
     segments_path = external_parameters['segments_dir_path']
     seg_duration = PARAMETERS['seg_effective_duration'] + 2*PARAMETERS['fadding']
 
@@ -62,7 +62,6 @@ def process_file(file, external_parameters):
 
     video_cap = cv2.VideoCapture(input_videofile_path)
     fps = video_cap.get(cv.CV_CAP_PROP_FPS)
-
 
     # minimum_duration = 2 * PARAMETERS['greetings_duration'] + PARAMETERS['cuts_per_video'] * seg_duration
     # if video_cap.get(cv.CV_CAP_PROP_FRAME_COUNT) / fps < minimum_duration:
@@ -83,32 +82,32 @@ def process_file(file, external_parameters):
         return
 
     # Not enough candidate segments
-    if len(segs) < PARAMETERS['cuts_per_video']:
-        print('Can\'t cut %d middle segments.' % PARAMETERS['cuts_per_video']),
-        # do not process further this video. Remove?
-        # -----------
-        if not external_parameters['oracle_mode']:
-            rename(input_videofile_path, join(discarded_path, file))  # don't ask
-            print('%s -> DISCARDED' % input_videofile_path)
-        else:
-            # ask oracle
-            print 'To remove it, press "r".'
-            counts, steps, _ = count_speakers_in_video_cuts(video_cap, frameskip=fps*seg_duration)
-            ret = display_mosaic_and_ask_oracle(video_cap, counts, steps)
-            if ret < 0:
-                rename(input_videofile_path, join(discarded_path, file))
-                print('%s -> DISCARDED' % input_videofile_path)
-    else:  # we could find the number of required segments indeed
-        st_sub_time = time.time()
-        for i, seg in enumerate(segs):
-            # play_video(video_cap, start=seg[0], end=seg[1], frameskip=5, repeat=True, detect_faces=True)
-            output_cutfile_path = file_parts[0] + '.' + str(i).zfill(3) + file_parts[1]
-            cut_videofile(join(videos_path, input_videofile_path), \
-                          join(segments_path, output_cutfile_path), \
-                          int(seg[0]/fps), seg_duration, \
-                          fade_in=PARAMETERS['fadding'], fade_out=PARAMETERS['fadding'])
-        print('[Encoding video] Time took: %.2f secs' % (time.time() - st_sub_time))
-        print('%s -> DONE (Total time took: %.2f secs)' % (input_videofile_path, time.time()-st_total_time))
+    # if len(segs) < PARAMETERS['cuts_per_video']:
+    #     print('Can\'t cut %d middle segments.' % PARAMETERS['cuts_per_video']),
+    #     # do not process further this video. Remove?
+    #     # -----------
+    #     if not external_parameters['oracle_mode']:
+    #         rename(input_videofile_path, join(discarded_path, file))  # don't ask
+    #         print('%s -> DISCARDED' % input_videofile_path)
+    #     else:
+    #         # ask oracle
+    #         print 'To remove it, press "r".'
+    #         counts, steps, _ = count_speakers_in_video_cuts(video_cap, frameskip=fps*seg_duration)
+    #         ret = display_mosaic_and_ask_oracle(video_cap, counts, steps)
+    #         if ret < 0:
+    #             rename(input_videofile_path, join(discarded_path, file))
+    #             print('%s -> DISCARDED' % input_videofile_path)
+    # else:  # we could find the number of required segments indeed
+    st_sub_time = time.time()
+    for i, seg in enumerate(segs):
+        # play_video(video_cap, start=seg[0], end=seg[1], frameskip=5, repeat=True, detect_faces=True)
+        output_cutfile_path = file_parts[0] + '.' + str(i).zfill(3) + file_parts[1]
+        cut_videofile(join(videos_path, input_videofile_path), \
+                      join(segments_path, output_cutfile_path), \
+                      int(seg[0]/fps), seg_duration, \
+                      fade_in=PARAMETERS['fadding'], fade_out=PARAMETERS['fadding'])
+    print('[Encoding video] Time took: %.2f secs' % (time.time() - st_sub_time))
+    print('%s -> DONE (Total time took: %.2f secs)' % (input_videofile_path, time.time()-st_total_time))
 
 
 def display_mosaic_and_ask_oracle(cap, counts, steps, nx=5, ny=5):
@@ -213,8 +212,8 @@ def get_random_middle_segments(video_cap, duration, n=3, time_gran_secs=1.0):
     validness_avg = moving_average_filter_in_1d_vec(validness,kernel_size=segment_kernel)
     candidates = np.where(validness_avg > PARAMETERS['segment_score_threshold'])[0]
 
-    if len(candidates) < n + 2:
-        return [], None, None  # not middle segments (n) and not initial and last segments (2)
+    # if len(candidates) < n + 2:
+    #     return [], None, None  # not middle segments (n) and not initial and last segments (2)
 
     # discard first initial (hello) segment and last (good-bye) segment
     first_seg = (max(0, (candidates[0]-int(extrema_kernel/2)) * fskip),                   \
@@ -504,7 +503,7 @@ if __name__ == "__main__":
 
     nt = 1
     if args.num_threads:
-        nt = args.num_threads
+        nt = int(args.num_threads)
 
     external_parameters['oracle_mode'] = args.oracle_mode
 
