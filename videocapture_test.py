@@ -498,9 +498,9 @@ if __name__ == "__main__":
     if args.discarded_dir_path:
         external_parameters['discarded_dir_path'] = args.discarded_dir_path
 
-        external_parameters['--segments-dir-path'] ='segments/'
-    if args.discarded_dir_path:
-        external_parameters['--segments-dir-path'] = args.discarded_dir_path
+    external_parameters['segments_dir_path'] ='segments/'
+    if args.segments_dir_path:
+        external_parameters['segments_dir_path'] = args.segments_dir_path
 
     nt = 1
     if args.num_threads:
