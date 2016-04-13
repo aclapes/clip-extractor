@@ -18,7 +18,7 @@ PARAMETERS = dict(
     face_cascade='haarcascade_frontalface_alt.xml',
     eye_cascade='haarcascade_eye.xml',
     bar_height=15,  # (in pixels)
-    fadding=0.25,  # video and audio in-out fadding time in a segment (in seconds)
+    fadding=0.15,  # video and audio in-out fadding time in a segment (in seconds)
     seg_effective_duration=15,  # segments' duration without fadding (in seconds)
     greetings_duration=0.5, # hello and goodbye segment duration (seconds)
     video_extension=['.mp4'],
@@ -404,6 +404,16 @@ def cut_videofile(input_videofile_path, output_cutfile_path, start, duration, \
                  '' if verbose else '-loglevel quiet', \
                  output_cutfile_path]  # DenseTrackStab is not accepting parameters, hardcoded the L in there
 
+    #ffmpeg -ss 00:00:15 -t 00:00:30 -i 9MhsBIiA4aU.mp4 -acodec copy -vcodec copy -async 1
+
+    argsArray = ['ffmpeg',
+                 '-ss', str(start), \
+                 '-t', str(duration), \
+                 '-i', input_videofile_path, \
+                 '-acodec copy',
+                 '-vcodec copy',
+                 '-async 1',
+                 output_cutfile_path]  # DenseTrackStab is not accepting parameters, hardcoded the L in there
     cmd = ' '.join(argsArray)
     p = subprocess.Popen(cmd, shell=True)
     p.communicate()
