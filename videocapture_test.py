@@ -404,15 +404,15 @@ def cut_videofile(input_videofile_path, output_cutfile_path, start, duration, \
                  '' if verbose else '-loglevel quiet', \
                  output_cutfile_path]  # DenseTrackStab is not accepting parameters, hardcoded the L in there
 
-    #ffmpeg -ss 00:00:15 -t 00:00:30 -i 9MhsBIiA4aU.mp4 -acodec copy -vcodec copy -async 1
+    #ffmpeg -i movie.mp4 -ss 00:00:03 -t 00:00:08 -async 1 cut.mp4
 
     argsArray = ['ffmpeg',
+                 '-i', input_videofile_path, \
                  '-ss', str(start), \
                  '-t', str(duration), \
-                 '-i', input_videofile_path, \
-                 '-acodec copy',
-                 '-vcodec copy',
                  '-async 1',
+                 '-y', \
+                 '' if verbose else '-loglevel quiet', \
                  output_cutfile_path]  # DenseTrackStab is not accepting parameters, hardcoded the L in there
     cmd = ' '.join(argsArray)
     p = subprocess.Popen(cmd, shell=True)
