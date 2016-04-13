@@ -10,6 +10,8 @@ import time
 import random
 import subprocess
 from joblib import delayed, Parallel
+from os.path import isfile, exists
+from os import makedirs
 
 
 PARAMETERS = dict(
@@ -27,9 +29,15 @@ PARAMETERS = dict(
     time_gran_secs=1,
 )
 
-def process(external_parameters, nt=nt):
+def process(external_parameters, nt=1):
+    # create segments' output directory if it doesn't exist already
+    if not exists(external_parameters['segments_dir_path']):
+        makedirs(external_parameters['segments_dir_path'])
+
+    # get a list of files to process
     dirlist = listdir(external_parameters['videos_dir_path'])
 
+    # process all the files!!
     Parallel(n_jobs=nt, backend='multiprocessing')(delayed(process_file)(file, external_parameters)
                                                    for file in dirlist)
 
