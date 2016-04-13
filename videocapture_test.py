@@ -12,7 +12,7 @@ import subprocess
 from joblib import delayed, Parallel
 from os.path import isfile, exists
 from os import makedirs
-
+import cPickle
 
 PARAMETERS = dict(
     face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_alt.xml'),
@@ -20,19 +20,25 @@ PARAMETERS = dict(
     bar_height=15,  # (in pixels)
     fadding=0.25,  # video and audio in-out fadding time in a segment (in seconds)
     seg_effective_duration=15,  # segments' duration without fadding (in seconds)
-    greetings_duration=0, # hello and goodbye segment duration (seconds)
+    greetings_duration=0.5, # hello and goodbye segment duration (seconds)
     video_extension=['.mp4'],
     # face_displacement_threshold=0.75,
     #video_score_threshold=0.33,  # 0-1 range
-    segment_score_threshold=0.5,  # 0-1 range
-    cuts_per_video=1000,
+    segment_score_threshold=0.75,  # 0-1 range
+    cuts_per_video=6,
     time_gran_secs=1,
 )
 
 def process(external_parameters, nt=1):
     # create segments' output directory if it doesn't exist already
-    if not exists(external_parameters['segments_dir_path']):
-        makedirs(external_parameters['segments_dir_path'])
+    output_path = external_parameters['segments_dir_path']
+    if not exists(output_path):
+        makedirs(output_path)
+    else:
+        if not exists(join(output_path, 'clips/')):
+            makedirs(join(output_path, 'clips/'))
+        if not exists(join(output_path, 'clip_metadata/')):
+            makedirs(join(output_path, 'clip_metadata/'))
 
     # get a list of files to process
     dirlist = listdir(external_parameters['videos_dir_path'])
@@ -45,8 +51,10 @@ def process(external_parameters, nt=1):
 def process_file(file, external_parameters):
     videos_path = external_parameters['videos_dir_path']
     # discarded_path = external_parameters['discarded_dir_path']
-    segments_path = external_parameters['segments_dir_path']
-    seg_duration = PARAMETERS['seg_effective_duration'] + 2*PARAMETERS['fadding']
+    output_path = external_parameters['segments_dir_path']
+
+    clip_duration = PARAMETERS['seg_effective_duration'] + 2*PARAMETERS['fadding']
+    # greet_duration = PARAMETERS['greetings_duration'] + PARAMETERS['fadding']
 
     # process .mp4 videos
     if splitext(file)[1] not in PARAMETERS['video_extension']:
@@ -55,58 +63,48 @@ def process_file(file, external_parameters):
     input_videofile_path = join(videos_path, file)
 
     file_parts = splitext(file)
-    output_cutfile_path = file_parts[0] + '.' + str(0).zfill(3) + file_parts[1]
-    if isfile(join(segments_path, output_cutfile_path)):
-        print('%s -> OK' % input_videofile_path)
+    output_metadata_path = join(output_path, 'clip_metadata/', file_parts[0] + '.pkl')
+    if isfile(output_metadata_path):
+        print('%s -> OK (already processed)' % file_parts[0])
         return
 
     video_cap = cv2.VideoCapture(input_videofile_path)
     fps = video_cap.get(cv.CV_CAP_PROP_FPS)
 
-    # minimum_duration = 2 * PARAMETERS['greetings_duration'] + PARAMETERS['cuts_per_video'] * seg_duration
-    # if video_cap.get(cv.CV_CAP_PROP_FRAME_COUNT) / fps < minimum_duration:
-    #     rename(input_videofile_path, join(discarded_path, file))
-    #     print('%s -> CANCELLED (too short)' % input_videofile_path)
-    #     continue
-
     # proceed normally
     st_total_time = time.time()
     try:
         st_sub_time = time.time()
-        segs, hello_seg, bye_seg = get_random_middle_segments(video_cap, seg_duration, \
-                                                              n=PARAMETERS['cuts_per_video'], \
-                                                              time_gran_secs=PARAMETERS['time_gran_secs'])
+        clips, remaining_segs = get_random_clips(video_cap, clip_duration, \
+                                                 n=PARAMETERS['cuts_per_video'], \
+                                                 time_gran_secs=PARAMETERS['time_gran_secs'])
         print('[Segment generation] Time took: %.2f' % (time.time() - st_sub_time))
     except cv2.error:
         print('%s -> ERROR' % input_videofile_path)
         return
 
-    # Not enough candidate segments
-    # if len(segs) < PARAMETERS['cuts_per_video']:
-    #     print('Can\'t cut %d middle segments.' % PARAMETERS['cuts_per_video']),
-    #     # do not process further this video. Remove?
-    #     # -----------
-    #     if not external_parameters['oracle_mode']:
-    #         rename(input_videofile_path, join(discarded_path, file))  # don't ask
-    #         print('%s -> DISCARDED' % input_videofile_path)
-    #     else:
-    #         # ask oracle
-    #         print 'To remove it, press "r".'
-    #         counts, steps, _ = count_speakers_in_video_cuts(video_cap, frameskip=fps*seg_duration)
-    #         ret = display_mosaic_and_ask_oracle(video_cap, counts, steps)
-    #         if ret < 0:
-    #             rename(input_videofile_path, join(discarded_path, file))
-    #             print('%s -> DISCARDED' % input_videofile_path)
-    # else:  # we could find the number of required segments indeed
     st_sub_time = time.time()
-    for i, seg in enumerate(segs):
-        # play_video(video_cap, start=seg[0], end=seg[1], frameskip=5, repeat=True, detect_faces=True)
+    for i, clip in enumerate(clips):
+        # play_video(video_cap, start=seg[0], end=seg[1], frameskip=1, repeat=True, detect_faces=True)
         output_cutfile_path = file_parts[0] + '.' + str(i).zfill(3) + file_parts[1]
         cut_videofile(join(videos_path, input_videofile_path), \
-                      join(segments_path, output_cutfile_path), \
-                      int(seg[0]/fps), seg_duration, \
+                      join(output_path, 'clips/', output_cutfile_path), \
+                      int(clip[0]/fps), clip_duration, \
                       fade_in=PARAMETERS['fadding'], fade_out=PARAMETERS['fadding'])
     print('[Encoding video] Time took: %.2f secs' % (time.time() - st_sub_time))
+
+    # Save beginning-end of segments into pickle
+    with open(output_metadata_path, 'wb'):
+        cPickle.dump(
+            dict(
+                clips=clips, \
+                remaining_segs=remaining_segs, \
+                fps=fps, \
+                total_frames=video_cap.get(cv.CV_CAP_PROP_FRAME_COUNT), \
+                parameters_dict=PARAMETERS
+            )
+        )
+
     print('%s -> DONE (Total time took: %.2f secs)' % (input_videofile_path, time.time()-st_total_time))
 
 
@@ -170,7 +168,7 @@ def moving_average_filter_in_1d_vec(x, kernel_size=5):
     return v
 
 
-def get_random_middle_segments(video_cap, duration, n=3, time_gran_secs=1.0):
+def get_random_clips(video_cap, duration, n=3, time_gran_secs=1.0, candidates=None):
     """
 
     :param video_cap:
@@ -180,59 +178,34 @@ def get_random_middle_segments(video_cap, duration, n=3, time_gran_secs=1.0):
     :return:
     """
     fps = video_cap.get(cv.CV_CAP_PROP_FPS)
-
     step = seconds_to_num_frames(duration, fps)
-    extrema_step = seconds_to_num_frames(duration, fps)
-
     fskip = time_gran_secs*fps  # that is performing face detection once per second of video
-    counts, cuts, faces = count_speakers_in_video_cuts(video_cap, frameskip=fskip)
-
-    # Filters
-    # -------
-
-    validness = np.ones((len(counts),), dtype=np.int32)
-
-    # (1) one and only speaker
-    validness[counts != 1] = 0
-
-    # (2) avoid changes in face position
-    # for i in range(1,len(faces)):
-    #     if len(faces[i]) == 1:
-    #         v_x = (faces[i][0][0] - faces[i-1][0][0])**2
-    #         v_y = (faces[i][0][1] - faces[i-1][0][1])**2
-    #         if np.sqrt(v_x + v_y) > PARAMETERS['face_displacement_threshold']:
-    #             validness[i] = 0
-
-    # -------
-
-
     segment_kernel = int(step/fskip)
-    extrema_kernel = int(extrema_step/fskip)
-    # not probable to find contiguious perfect segments, but good enough segments (as many as possible valid frames)
-    validness_avg = moving_average_filter_in_1d_vec(validness,kernel_size=segment_kernel)
-    candidates = np.where(validness_avg > PARAMETERS['segment_score_threshold'])[0]
 
-    # if len(candidates) < n + 2:
-    #     return [], None, None  # not middle segments (n) and not initial and last segments (2)
+    if candidates is None:
+        counts, cuts, faces = count_speakers_in_video_cuts(video_cap, frameskip=fskip)
 
-    # discard first initial (hello) segment and last (good-bye) segment
-    first_seg = (max(0, (candidates[0]-int(extrema_kernel/2)) * fskip),                   \
-                 max(step, (candidates[0]+int(extrema_kernel/2)+1) * fskip))
-    last_seg =  (min((candidates[-1]-int(extrema_kernel/2)) * fskip, (cuts[-1] - step)), \
-                 min((candidates[-1]+int(extrema_kernel/2)+1) * fskip, cuts[-1]))
+        # Filtering criteria
+        # -------
+        validness = np.ones((len(counts),), dtype=np.int32)
+        # (1) one and only speaker
+        validness[counts != 1] = 0
+        # -------
 
-    middle_candidates = candidates[np.where((candidates >= first_seg[1]/fskip+int(extrema_kernel/2)) & \
-                                            (candidates < last_seg[0]/fskip-int(extrema_kernel/2)))[0]]
+        # not probable to find contiguious perfect segments, but good enough segments (as many as possible valid frames)
+        validness_avg = moving_average_filter_in_1d_vec(validness,kernel_size=segment_kernel)
+        candidates = np.where(validness_avg > PARAMETERS['segment_score_threshold'])[0]
 
-    middle_segs = []
-    while len(middle_segs) < n and len(middle_candidates) >= segment_kernel:
-        center_seg = random.sample(middle_candidates, 1)[0]
-        middle_segs.append(((center_seg - int(segment_kernel/2)) * fskip, (center_seg + int(segment_kernel/2) + 1) * fskip))
-        remaining_inds = np.where((middle_candidates > center_seg + int(segment_kernel/2)) | \
-                                  (middle_candidates < center_seg - int(segment_kernel/2)))[0]
-        middle_candidates = middle_candidates[remaining_inds]
+    segs = []
+    while len(segs) < n and len(candidates) >= segment_kernel:
+        # center_seg = random.sample(candidates, 1)[0]
+        idx = candidates[random.randint(0,len(candidates)-1)]
+        segs.append(((idx - int(segment_kernel/2)) * fskip, (idx + int(segment_kernel/2) + 1) * fskip))
 
-    return middle_segs, first_seg, last_seg
+        mask = (candidates > idx + int(segment_kernel/2)) | (candidates < idx - int(segment_kernel/2))
+        candidates = candidates[np.where(mask)[0]]  # update with the remaining candidates
+
+    return segs, candidates
 
 
 def count_speakers_in_video_cuts(cap, start=-1, end=-1, frameskip=1):
@@ -480,10 +453,10 @@ if __name__ == "__main__":
     # parse the input arguments
     parser = argparse.ArgumentParser(description='Process the videos to see whether they contain speaking-while-facing-a-camera scenes.')
     parser.add_argument('--videos-dir-path', help='the directory where videos are downloaded.')
-    parser.add_argument('--discarded-dir-path', help='the directory where videos are discarded.')
+    # parser.add_argument('--discarded-dir-path', help='the directory where videos are discarded.')
     parser.add_argument('--segments-dir-path', help='the directory where to output segments.')
     parser.add_argument('--num-threads', help='the directory where to output segments.')
-    parser.add_argument('-O', '--oracle-mode', action='store_true')
+    # parser.add_argument('-O', '--oracle-mode', action='store_true')
 
     args = parser.parse_args()
 
@@ -493,9 +466,9 @@ if __name__ == "__main__":
     if args.videos_dir_path:
         external_parameters['videos_dir_path'] = args.videos_dir_path
 
-    external_parameters['discarded_dir_path'] ='discarded/'
-    if args.discarded_dir_path:
-        external_parameters['discarded_dir_path'] = args.discarded_dir_path
+    # external_parameters['discarded_dir_path'] ='discarded/'
+    # if args.discarded_dir_path:
+    #     external_parameters['discarded_dir_path'] = args.discarded_dir_path
 
     external_parameters['segments_dir_path'] ='segments/'
     if args.segments_dir_path:
@@ -505,7 +478,7 @@ if __name__ == "__main__":
     if args.num_threads:
         nt = int(args.num_threads)
 
-    external_parameters['oracle_mode'] = args.oracle_mode
+    # external_parameters['oracle_mode'] = args.oracle_mode
 
     # PROCEED downloading videos from the queries
     process(external_parameters=external_parameters, nt=nt)
