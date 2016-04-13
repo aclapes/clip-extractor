@@ -15,8 +15,8 @@ from os import makedirs
 import cPickle
 
 PARAMETERS = dict(
-    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_alt.xml'),
-    eye_cascade = cv2.CascadeClassifier('haarcascade_eye.xml'),
+    face_cascade='haarcascade_frontalface_alt.xml',
+    eye_cascade='haarcascade_eye.xml',
     bar_height=15,  # (in pixels)
     fadding=0.25,  # video and audio in-out fadding time in a segment (in seconds)
     seg_effective_duration=15,  # segments' duration without fadding (in seconds)
@@ -68,6 +68,8 @@ def process_file(file, external_parameters):
         print('%s -> OK (already processed)' % file_parts[0])
         return
 
+    print('Processing %s ..' % file_parts[0])
+
     video_cap = cv2.VideoCapture(input_videofile_path)
     fps = video_cap.get(cv.CV_CAP_PROP_FPS)
 
@@ -91,10 +93,10 @@ def process_file(file, external_parameters):
                       join(output_path, 'clips/', output_cutfile_path), \
                       int(clip[0]/fps), clip_duration, \
                       fade_in=PARAMETERS['fadding'], fade_out=PARAMETERS['fadding'])
-    print('[Encoding video] Time took: %.2f secs' % (time.time() - st_sub_time))
+    print('[Encoding clips] Time took: %.2f secs' % (time.time() - st_sub_time))
 
     # Save beginning-end of segments into pickle
-    with open(output_metadata_path, 'wb'):
+    with open(output_metadata_path, 'w') as f:
         cPickle.dump(
             dict(
                 clips=clips, \
@@ -102,10 +104,9 @@ def process_file(file, external_parameters):
                 fps=fps, \
                 total_frames=video_cap.get(cv.CV_CAP_PROP_FRAME_COUNT), \
                 parameters_dict=PARAMETERS
-            )
-        )
+            ), f)
 
-    print('%s -> DONE (Total time took: %.2f secs)' % (input_videofile_path, time.time()-st_total_time))
+    print('%d clips generated -> DONE (Total time took: %.2f secs)' % (len(clips),time.time()-st_total_time))
 
 
 def display_mosaic_and_ask_oracle(cap, counts, steps, nx=5, ny=5):
@@ -266,7 +267,7 @@ def detect_faces_and_contained_eyes(img, r=1.0):
 
     min_side = height if height < width else width
     # Get an initial set of face hypthesis
-    faces_h = PARAMETERS['face_cascade'].detectMultiScale(gray, scaleFactor=1.05, minNeighbors=4, \
+    faces_h = cv2.CascadeClassifier(PARAMETERS['face_cascade']).detectMultiScale(gray, scaleFactor=1.05, minNeighbors=4, \
                                                          minSize=(int(min_side/10),int(min_side/10)), maxSize=(min_side,min_side), \
                                                          flags = cv.CV_HAAR_SCALE_IMAGE) # naive detection
 
@@ -275,7 +276,7 @@ def detect_faces_and_contained_eyes(img, r=1.0):
     eyes = []
     for face in faces_h:
         x,y,w,h = face
-        face_eyes = PARAMETERS['eye_cascade'].detectMultiScale(gray[y:y+h,x:x+w])
+        face_eyes = cv2.CascadeClassifier(PARAMETERS['eye_cascade']).detectMultiScale(gray[y:y+h,x:x+w])
         if len(face_eyes) > 0:  # at least one eye detected
             faces.append(face)
             eyes.append(face_eyes)
