@@ -65,3 +65,6 @@ target/
 #Ipython Notebook
 .ipynb_checkpoints
 >>>>>>> 2d84b92549efc2d0506a32f67601e8a15357cac8
+
+# run bash script
+run.sh
