@@ -16,8 +16,8 @@ This software is intended to extract video cuts that satisfy certain criteria:
 Usage
 -----
 $ ./videocapture_test.py
-    --videos-dir-path=/data/hubpa/Derived/firstimpressions/videos/
-    --segments-dir-path=/data/hubpa/Derived/firstimpressions/segments/
+    --videos-dir-path=/data/hubpa/Datasets/YoutubeMonk/
+    --segments-dir-path=/data/hubpa/Datasets/YoutubeMonk/clips/
     --num_threads=40
 
 
