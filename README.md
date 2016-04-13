@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ====================================
 SEGMENT CUTTING SOFTWARE
 ---
@@ -32,7 +31,3 @@ Dependences
 -----------
 - OpenCV 2.4.X
 - Some Python libraries
-=======
-# clip-extractor
-Tentative script used to extract segment (or clips) from videos given face detection criteria
->>>>>>> 2d84b92549efc2d0506a32f67601e8a15357cac8
